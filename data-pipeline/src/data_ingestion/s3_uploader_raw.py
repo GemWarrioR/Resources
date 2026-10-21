@@ -44,11 +44,11 @@ def upload_data_to_s3():
 
         
         # Find CSV files in data/raw/
-        data_folder = Path("../../data/raw")
-
+        data_folder = Path("data/raw")
+        
         if not data_folder.exists():
-            data_folder = Path("data/raw")
-
+            data_folder = Path("../../data/raw")
+    
         if not data_folder.exists():
             print("ERROR: Data folder not found!")
             print("Make sure you have data/raw CSV files")
@@ -56,15 +56,83 @@ def upload_data_to_s3():
         
         # Get list of CSV files
         csv_files = list(data_folder.glob("*.csv"))
- 
+
+        if not csv_files:
+            print(f"ERROR: No CSV files found in {data_folder}")
+            return False
+
+        print(f"Found {len(csv_files)} files to upload...")
 
         # Upload each file
+        uploaded_count = 0
 
- 
+        for csv_file in csv_files:
+
+            s3_key = f"raw-data/{csv_file.name}"
+            print(f"Uploading {csv_file.name}...")
+
+            try:
+                s3.upload_file(str(csv_file),bucket_name,s3_key)
+                print(f"SUCCESS: Uploaded to S3://{bucket_name}/{s3_key}")
+                uploaded_count += 1
+
+            except Exception as upload_error:
+                print(f"ERROR: Failed to upload {csv_file.name}: {upload_error}")
+
+        if uploaded_count == len(csv_files):
+            print(f"\nSUCESS: All {uploaded_count} files uploaded!")
+            return True
+        else:
+            print(f"\nPartial Sucess: {uploaded_count}/{len(csv_files)} files uploaded")
+            return False
+
+    except Exception as e:
+        print(f"ERROR: Upload failed: {e}")
+        print("Check you AWS credentials and bucket permission")
+
+        return False
 
         # Verification
 
-     
+
+def verify_upload():
+    print("\nVerifying upload...")
+
+    load_dotenv()
+    
+    bucket_name = os.getenv('AWS_S3_BUCKET_NAME')
+    region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
+
+    try:
+        # Create S3 Client
+        s3 = boto3.client('s3', region_name = region )
+
+        response = s3.list_objects_v2(Bucket=bucket_name, Prefix = "raw-data/")
+
+        if "Contents" not in response:
+            print("ERROR: No files found in bucket.")
+            return False
+
+        files = response["Contents"]
+        print(f"Fount {len(files)} files in S3:")
+
+        total_size_mb = 0
+
+        for file in files:
+            size_mb = file['Size'] / (1024*1024)
+            total_size_mb += size_mb
+            print(f" {file["Key"]} ({size_mb:.2f} MB)")
+
+        print(f"Total data: size:  {total_size_mb: .2f} ")
+        print("Upload verification complete!")
+        return True
+    
+    except Exception as e:
+        print(f"Verification Failed: {e}")
+       
+        return False
+
+    
 
 if __name__ == "__main__":
     # Run upload
@@ -75,3 +143,5 @@ if __name__ == "__main__":
         verify_upload()
     
     print("\nNext step: Data processing and transformation!")
+
+   
